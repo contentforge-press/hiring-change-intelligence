@@ -9,3 +9,7 @@ crons = ["0 9 * * *"]
 [[kv_namespaces]]
 binding = "INTEL_KV"
 id = "1096bf99d724411b969709b82348caa6"
+
+[[kv_namespaces]]
+binding = "SHARED_KV"
+id = "ed62f7b5d5274de686f5f699915a30a1"

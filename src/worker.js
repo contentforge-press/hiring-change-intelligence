@@ -664,7 +664,7 @@ async function createDirectOrder(plan, kv) {
     if (kv) await kv.put(`order-${orderId}`, JSON.stringify(order), { expirationTtl: 5400 });
     return order;
 }
-async function checkDirectOrder(order, kv) {
+async function checkDirectOrder(order, kv, skv) {
     if (order.status === 'paid') return order;
     if (new Date(order.expiresAt).getTime() < Date.now()) { order.status = 'expired'; return order; }
     const found = await findDirectPayment(order.amountUnits);
@@ -674,7 +674,7 @@ async function checkDirectOrder(order, kv) {
     const expiresAt = new Date(Date.now() + plan.days * 86400e3).toISOString();
     const accessKey = newAccessKey();
     order.accessKey = accessKey;
-    if (kv) await kv.put(`sub-${accessKey}`, JSON.stringify({ accessKey, plan: plan.id, payer: found.from || '', startedAt: new Date().toISOString(), expiresAt, priceUsd: plan.price, source: 'direct', orderId: order.orderId }));
+    if (kv) await (skv || kv).put(`sub-${accessKey}`, JSON.stringify({ accessKey, plan: plan.id, payer: found.from || '', startedAt: new Date().toISOString(), expiresAt, priceUsd: plan.price, source: 'direct', orderId: order.orderId }));
     if (kv) await kv.put(`order-${order.orderId}`, JSON.stringify(order));
     return order;
 }
@@ -691,8 +691,9 @@ async function handleSubscribe(url, request, env) {
     const expiresAt = new Date(now + plan.days * 86400_000).toISOString();
     const accessKey = newAccessKey();
     const record = { accessKey, plan: plan.id, payer: pay.settlement.payer, startedAt: new Date(now).toISOString(), expiresAt, transaction: pay.settlement.transaction, priceUsd: plan.price };
+    const shared = env.SHARED_KV || env.INTEL_KV;
     if (env.INTEL_KV) {
-        await env.INTEL_KV.put(`sub-${accessKey}`, JSON.stringify(record));
+        await shared.put(`sub-${accessKey}`, JSON.stringify(record));
         await env.INTEL_KV.put(`subpayer-${pay.settlement.payer}`, accessKey);
     }
     return json({ ok: true, accessKey, plan: plan.id, payer: pay.settlement.payer, startedAt: record.startedAt, expiresAt, transaction: pay.settlement.transaction });
@@ -701,9 +702,9 @@ async function handleSubscribe(url, request, env) {
 // ---- Dashboard & watchlist -------------------------------------------------
 const LIMITS = { pro: 25, business: 150, enterprise: 100000 };
 
-async function loadSubscription(kv, accessKey) {
-    if (!kv || !accessKey) return null;
-    const raw = await kv.get(`sub-${accessKey}`);
+async function loadSubscription(kv, accessKey, skv) {
+    if (!accessKey) return null;
+    const raw = await (skv || kv)?.get(`sub-${accessKey}`);
     if (!raw) return null;
     const sub = JSON.parse(raw);
     sub.active = new Date(sub.expiresAt).getTime() > Date.now();
@@ -713,8 +714,8 @@ async function getWatchlist(kv, key) {
     const raw = await kv.get(`watch-${key}`);
     return raw ? JSON.parse(raw) : { companies: [], webhookUrl: '', alertEmail: '', updatedAt: null };
 }
-async function watchView(kv, key) {
-    const sub = await loadSubscription(kv, key);
+async function watchView(kv, key, skv) {
+    const sub = await loadSubscription(kv, key, skv);
     if (!sub) return { error: 'invalid_key', status: 401 };
     const wl = await getWatchlist(kv, key);
     return { accessKey: key, plan: sub.plan, active: sub.active, expiresAt: sub.expiresAt, storeLimit: LIMITS[sub.plan] || 0, companies: wl.companies, webhookUrl: wl.webhookUrl || '', alertEmail: wl.alertEmail || '' };
@@ -793,11 +794,11 @@ function saveSettings(){post('/v1/lwatch/settings?key='+encodeURIComponent(st.ac
 
 async function readJsonBody(request){try{return await request.json();}catch{return{};}}
 
-async function hWatchGet(url,request,env){const v=await watchView(env.INTEL_KV,url.searchParams.get('key'));return json(v,v.status||200);}
+async function hWatchGet(url,request,env){const v=await watchView(env.INTEL_KV,url.searchParams.get('key'),env.SHARED_KV);return json(v,v.status||200);}
 
 async function hWatchAdd(url,request,env){
- const kv=env.INTEL_KV,key=url.searchParams.get('key');
- const sub=await loadSubscription(kv,key);if(!sub)return json({error:'invalid_key'},401);if(!sub.active)return json({error:'subscription_expired'},402);
+ const kv=env.INTEL_KV,skv=env.SHARED_KV||kv,key=url.searchParams.get('key');
+ const sub=await loadSubscription(kv,key,skv);if(!sub)return json({error:'invalid_key'},401);if(!sub.active)return json({error:'subscription_expired'},402);
  const body=await readJsonBody(request);const target=parseTarget(body.company);
  if(!target)return json({error:'invalid_company'},400);
  const wl=await getWatchlist(kv,key);
@@ -805,20 +806,20 @@ async function hWatchAdd(url,request,env){
  if(wl.companies.some(c=>c.company===target.handle&&c.platform_target===target.platform))return json({error:'already_added'},400);
  wl.companies.push({company:target.handle,platform_target:target.platform,addedAt:new Date().toISOString(),lastChecked:null,lastChanges:[]});
  await kv.put(`watch-${key}`,JSON.stringify(wl));
- return json(await watchView(kv,key));
+ return json(await watchView(kv,key,skv));
 }
 async function hWatchRemove(url,request,env){
- const kv=env.INTEL_KV,key=url.searchParams.get('key');
- if(!(await loadSubscription(kv,key)))return json({error:'invalid_key'},401);
+ const kv=env.INTEL_KV,skv=env.SHARED_KV||kv,key=url.searchParams.get('key');
+ if(!(await loadSubscription(kv,key,skv)))return json({error:'invalid_key'},401);
  const body=await readJsonBody(request);
  const wl=await getWatchlist(kv,key);
  wl.companies=wl.companies.filter(c=>c.company!==safeHandle(body.company));
  await kv.put(`watch-${key}`,JSON.stringify(wl));
- return json(await watchView(kv,key));
+ return json(await watchView(kv,key,skv));
 }
 async function hWatchSettings(url,request,env){
- const kv=env.INTEL_KV,key=url.searchParams.get('key');
- if(!(await loadSubscription(kv,key)))return json({error:'invalid_key'},401);
+ const kv=env.INTEL_KV,skv=env.SHARED_KV||kv,key=url.searchParams.get('key');
+ if(!(await loadSubscription(kv,key,skv)))return json({error:'invalid_key'},401);
  const body=await readJsonBody(request);
  const webhookUrl=(body.webhookUrl||'').trim().slice(0,500);
  const alertEmail=(body.alertEmail||'').trim().slice(0,200);
@@ -827,7 +828,7 @@ async function hWatchSettings(url,request,env){
  const wl=await getWatchlist(kv,key);
  wl.webhookUrl=webhookUrl;wl.alertEmail=alertEmail;
  await kv.put(`watch-${key}`,JSON.stringify(wl));
- return json(await watchView(kv,key));
+ return json(await watchView(kv,key,skv));
 }
 
 async function dispatchHiringAlerts(wl,alerts){
@@ -843,8 +844,8 @@ async function dispatchHiringAlerts(wl,alerts){
 }
 
 async function hWatchRefresh(url,request,env){
- const kv=env.INTEL_KV,key=url.searchParams.get('key');
- const sub=await loadSubscription(kv,key);if(!sub)return json({error:'invalid_key'},401);if(!sub.active)return json({error:'subscription_expired'},402);
+ const kv=env.INTEL_KV,skv=env.SHARED_KV||kv,key=url.searchParams.get('key');
+ const sub=await loadSubscription(kv,key,skv);if(!sub)return json({error:'invalid_key'},401);if(!sub.active)return json({error:'subscription_expired'},402);
  const wl=await getWatchlist(kv,key);
  const only=safeHandle(url.searchParams.get('company'));
  const targets=only?wl.companies.filter(c=>c.company===only):wl.companies;
@@ -862,17 +863,17 @@ async function hWatchRefresh(url,request,env){
  }));
  await kv.put(`watch-${key}`,JSON.stringify(wl));
  await dispatchHiringAlerts(wl,alerts);
- return json(await watchView(kv,key));
+ return json(await watchView(kv,key,skv));
 }
 
 async function scheduledScan(env){
- const kv=env.INTEL_KV;let cursor,scanned=0,refreshed=0;
+ const kv=env.INTEL_KV,skv=env.SHARED_KV||kv;let cursor,scanned=0,refreshed=0;
  do{
   const l=await kv.list({prefix:'watch-',cursor,limit:100});
   for(const it of l.keys){
    const key=it.name.slice(6);if(!key.startsWith('sci_'))continue;scanned++;
    try{
-    const sub=await loadSubscription(kv,key);if(!sub||!sub.active)continue;
+    const sub=await loadSubscription(kv,key,skv);if(!sub||!sub.active)continue;
     const wl=await getWatchlist(kv,key);if(!wl.companies.length)continue;
     const alerts=[];
     await Promise.all(wl.companies.map(async entry=>{
@@ -1097,7 +1098,7 @@ async function handle(request, env) {
         const id = url.searchParams.get('id');
         const raw = id && env.INTEL_KV ? await env.INTEL_KV.get(`order-${id}`) : null;
         if (!raw) return json({ error: 'order_not_found' }, 404);
-        return json(await checkDirectOrder(JSON.parse(raw), env.INTEL_KV));
+        return json(await checkDirectOrder(JSON.parse(raw), env.INTEL_KV, env.SHARED_KV));
     }
     if (pathname === '/v1/lwatch') return hWatchGet(url, request, env);
     if (pathname === '/v1/lwatch/add') return hWatchAdd(url, request, env);
