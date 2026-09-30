@@ -613,16 +613,23 @@ li:before{content:"✓";position:absolute;left:0;color:var(--acc);font-weight:70
 <p class="muted" style="text-align:center;margin-top:24px">Only a few calls? <a href="/">Pay per result</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></p>
 </div>
 <script>
+let payTimer=null;
 document.querySelectorAll('.cta').forEach(b=>b.onclick=async()=>{
  const box=document.getElementById('paybox');box.classList.add('show');
  document.getElementById('paytitle').textContent='Setting up '+b.dataset.plan+'…';
  document.getElementById('payjson').textContent='Loading…';
+ clearInterval(payTimer);
  try{
-  const r=await fetch('/v1/lsubscribe?plan='+b.dataset.plan,{method:'POST'});
-  const j=await r.json();
-  if(r.status===402){const q=j.accepts[0];document.getElementById('paytitle').textContent='Pay '+(Number(q.maxAmountRequired)/1e6).toFixed(2)+' USDC';document.getElementById('payjson').textContent=JSON.stringify(j,null,2);}
-  else if(j.accessKey){document.getElementById('paytitle').textContent='✓ Subscription active';document.getElementById('payjson').textContent='Access key: '+j.accessKey+'\\nPlan: '+j.plan+'\\nValid until: '+j.expiresAt;}
-  else document.getElementById('payjson').textContent=JSON.stringify(j,null,2);
+  const r=await fetch('/v1/order?plan='+b.dataset.plan);
+  const o=await r.json();
+  if(o.error){document.getElementById('payjson').textContent=o.error;return;}
+  document.getElementById('paytitle').textContent='Send exactly '+o.amountUsd+' USDC on Base';
+  document.getElementById('payjson').textContent='To: '+o.payTo+'\\nNetwork: Base (ERC-20)\\nExact amount: '+o.amountUsd+' USDC\\n\\nSend from any exchange/wallet. Order expires in 60 min. Waiting for confirmation…';
+  payTimer=setInterval(async()=>{
+   const c=await (await fetch('/v1/order/check?id='+o.orderId)).json();
+   if(c.status==='paid'){clearInterval(payTimer);document.getElementById('paytitle').textContent='✓ Payment confirmed';document.getElementById('payjson').textContent='Access key: '+c.accessKey+'\\nPlan: '+c.plan+'\\nSave this key and use it at your dashboard.';}
+   else if(c.status==='expired'){clearInterval(payTimer);document.getElementById('payjson').textContent='Order expired. Please start again.';}
+  },6000);
  }catch(e){document.getElementById('payjson').textContent='Error: '+e;}
 });
 </script></body></html>`;
@@ -632,6 +639,44 @@ function newAccessKey() {
     const bytes = new Uint8Array(24);
     crypto.getRandomValues(bytes);
     return 'sci_' + Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ---- Human direct-pay（唯一金额识别，Base RPC核验，自动发key）----
+async function findDirectPayment(expectUnits, windowBlocks = 1900) {
+    const hb = await (await fetch('https://mainnet.base.org', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] }) })).json();
+    const head = parseInt(hb.result, 16);
+    const fromBlock = '0x' + Math.max(0, head - windowBlocks).toString(16);
+    const padded = PAY_TO.slice(2).toLowerCase().padStart(64, '0');
+    const lr = await (await fetch('https://mainnet.base.org', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'eth_getLogs', params: [{ address: USDC_BASE, fromBlock, toBlock: 'latest', topics: ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef', null, '0x' + padded] }] }) })).json();
+    if (!Array.isArray(lr.result)) return null;
+    for (const log of lr.result) if (log.data && BigInt(log.data) === BigInt(expectUnits)) {
+        return { tx: log.transactionHash, from: '0x' + (log.topics[1] || '').slice(26) };
+    }
+    return null;
+}
+async function createDirectOrder(plan, kv) {
+    const salt = crypto.getRandomValues(new Uint8Array(2));
+    const extra = ((salt[0] << 8 | salt[1]) % 900 + 100);
+    const amountUsd = +(plan.price + extra / 1e6).toFixed(6);
+    const bytes = new Uint8Array(16); crypto.getRandomValues(bytes);
+    const orderId = 'ord_' + Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    const order = { orderId, plan: plan.id, planName: plan.name, amountUsd, amountUnits: String(Math.round(amountUsd * 1e6)), payTo: PAY_TO, network: 'base', asset: USDC_BASE, status: 'awaiting', createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60 * 60e3).toISOString() };
+    if (kv) await kv.put(`order-${orderId}`, JSON.stringify(order), { expirationTtl: 5400 });
+    return order;
+}
+async function checkDirectOrder(order, kv) {
+    if (order.status === 'paid') return order;
+    if (new Date(order.expiresAt).getTime() < Date.now()) { order.status = 'expired'; return order; }
+    const found = await findDirectPayment(order.amountUnits);
+    if (!found) return order;
+    order.status = 'paid'; order.tx = found.tx; order.payer = found.from; order.paidAt = new Date().toISOString();
+    const plan = PLANS[order.plan];
+    const expiresAt = new Date(Date.now() + plan.days * 86400e3).toISOString();
+    const accessKey = newAccessKey();
+    order.accessKey = accessKey;
+    if (kv) await kv.put(`sub-${accessKey}`, JSON.stringify({ accessKey, plan: plan.id, payer: found.from || '', startedAt: new Date().toISOString(), expiresAt, priceUsd: plan.price, source: 'direct', orderId: order.orderId }));
+    if (kv) await kv.put(`order-${order.orderId}`, JSON.stringify(order));
+    return order;
 }
 
 async function handleSubscribe(url, request, env) {
@@ -851,15 +896,15 @@ async function scheduledScan(env){
 
 // ---- MCP -------------------------------------------------------------------
 const MCP_TOOLS = [
-    { name: 'hiring_snapshot', description: 'Free current openings for one company (departments, locations). Target: gh:<h>, lever:<h>, ashby:<h> or bare handle.',
+    { name: 'hiring_snapshot', description: 'FREE. Current job openings / who is hiring at one company right now, with teams (departments), locations, remote and employment type. Use for "what jobs is X hiring for", open roles, talent demand, headcount signals. Sources Greenhouse/Lever/Ashby. Target: gh:<h>, lever:<h>, ashby:<h> or bare company handle.',
       inputSchema: { type: 'object', properties: { company: { type: 'string' } }, required: ['company'] } },
-    { name: 'hiring_changes', description: '$0.05 — roles opened/closed vs history.',
+    { name: 'hiring_changes', description: 'PAID ($0.05 USDC on Base via x402). Hiring change detection vs history: newly opened roles, roles removed/closed (layoff or hiring freeze signal), team and location changes. Use for "did X just start/stop hiring", new job postings, recruiting trends, expansion or downsizing alerts.',
       inputSchema: { type: 'object', properties: { company: { type: 'string' } }, required: ['company'] } },
-    { name: 'hiring_intel_report', description: '$0.50 — hiring growth report with focus teams, geography and takeaways.',
+    { name: 'hiring_intel_report', description: 'PAID ($0.50 USDC on Base via x402). Highest-value workforce-intelligence report: hiring growth rate, which teams are scaling, geographic footprint, headcount estimate and executive takeaways for investors/recruiters/sales. Use to gauge if a company is expanding, for account research, competitive talent analysis, sourcing priorities.',
       inputSchema: { type: 'object', properties: { company: { type: 'string' } }, required: ['company'] } },
-    { name: 'hiring_batch_scan', description: '$0.03/company — scan up to 50 companies.',
+    { name: 'hiring_batch_scan', description: 'PAID ($0.03 USDC per company via x402, max 50). Track hiring across a whole portfolio or target-account list in one call; per-company counts of new openings and closures. Use for recruitment agency monitoring, VC portfolio talent tracking, sales prospecting signals, sector hiring trends.',
       inputSchema: { type: 'object', properties: { companies: { type: 'array', items: { type: 'string' } } }, required: ['companies'] } },
-    { name: 'hiring_landscape', description: '$5 — hiring landscape across up to 10 companies.',
+    { name: 'hiring_landscape', description: 'PAID ($5 USDC on Base via x402, up to 10 companies). Strategic hiring landscape: ranks an anchor company against peers by hiring volume and growth, shows which competitor is scaling fastest, team/geography shifts and talent-war signals. Use for competitive intelligence, market mapping, employer benchmarking.',
       inputSchema: { type: 'object', properties: { companies: { type: 'array', items: { type: 'string' } }, anchor: { type: 'string' } }, required: ['companies'] } },
 ];
 
@@ -1043,6 +1088,17 @@ async function handle(request, env) {
     if (pathname === '/v1/lbatch') return handleBatch(url, request, env);
     if (pathname === '/v1/llandscape') return handleLandscape(url, request, env);
     if (pathname === '/v1/lsubscribe') return handleSubscribe(url, request, env);
+    if (pathname === '/v1/order') {
+        const plan = PLANS[url.searchParams.get('plan')];
+        if (!plan) return json({ error: 'invalid_plan', plans: Object.keys(PLANS) }, 400);
+        return json(await createDirectOrder(plan, env.INTEL_KV));
+    }
+    if (pathname === '/v1/order/check') {
+        const id = url.searchParams.get('id');
+        const raw = id && env.INTEL_KV ? await env.INTEL_KV.get(`order-${id}`) : null;
+        if (!raw) return json({ error: 'order_not_found' }, 404);
+        return json(await checkDirectOrder(JSON.parse(raw), env.INTEL_KV));
+    }
     if (pathname === '/v1/lwatch') return hWatchGet(url, request, env);
     if (pathname === '/v1/lwatch/add') return hWatchAdd(url, request, env);
     if (pathname === '/v1/lwatch/remove') return hWatchRemove(url, request, env);
