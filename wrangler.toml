@@ -1,0 +1,11 @@
+name = "hiring-intel"
+main = "src/worker.js"
+compatibility_date = "2026-09-26"
+compatibility_flags = ["nodejs_compat"]
+
+[triggers]
+crons = ["0 9 * * *"]
+
+[[kv_namespaces]]
+binding = "INTEL_KV"
+id = "1096bf99d724411b969709b82348caa6"
