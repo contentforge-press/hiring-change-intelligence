@@ -486,6 +486,10 @@ function renderHome() {
 </div>
 <p class="muted" style="margin:12px 0 0">Syntax: <code>gh:&lt;handle&gt;</code> <code>lever:&lt;handle&gt;</code> <code>ashby:&lt;handle&gt;</code>, or a bare handle (auto-detect).</p>
 <pre id="out">// result will appear here</pre>
+<div id="up" class="card" style="display:none;border-color:var(--acc);background:linear-gradient(180deg,rgba(91,140,255,.10),var(--card))">
+<b>That's the current state.</b><p class="muted">A <code>$0.05</code> changes call shows exactly what's new since your last check — roles opened and closed, which teams are growing. Watching hiring continuously with alerts starts at $99/month.</p>
+<div class="row"><a href="/pricing" style="text-decoration:none"><button type="button">See plans</button></a></div>
+</div>
 </div>
 
 <div class="grid">
@@ -526,6 +530,7 @@ async function run(){
   const r=await fetch('/v1/snapshot?company='+c);
   const d=await r.json();
   out.textContent=JSON.stringify({company:d.company,platform:d.platform,totalOpenings:d.totalOpenings,byDepartment:d.byDepartment},null,2);
+  document.getElementById('up').style.display='block';
  }catch(e){out.textContent='// error: '+e;}
 }
 </script>
