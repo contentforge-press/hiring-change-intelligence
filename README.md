@@ -1,51 +1,87 @@
-# Hiring Change Intelligence
+# 🧑‍💼 Hiring Change Intelligence
 
-> Track which companies are hiring — and where the roles are. Hiring-growth signals for **investors, recruiters and sales teams**, delivered over HTTP and MCP, paid by AI agents in **USDC on Base** via **x402**.
+![MCP](https://img.shields.io/badge/MCP-Streamable%20HTTP-7c3aed)
+![x402](https://img.shields.io/badge/x402-v1%20%2B%20v2-6938ef)
+![USDC](https://img.shields.io/badge/settle-USDC%20on%20Base-1f6feb)
+![price](https://img.shields.io/badge/from-%240.05%2Fcall-2ea043)
 
-Reads the public job boards that companies already publish (Greenhouse / Lever / Ashby). No cards, no signup, no processor.
+Track which companies are hiring — and where the roles are — from the job boards they already publish.
 
-**Endpoint (MCP, Streamable HTTP):** `https://hiring-intel.contentforge-press.workers.dev/mcp`
+Agents pay **peer-to-peer in USDC on Base** using the native **x402** protocol — no platform account, no payment processor, **0% commission**. You can also use a monthly key. One key works across the [whole Change Intelligence family](https://pixharvest.com).
 
-## Target syntax
-- `gh:<handle>` — Greenhouse (alias `greenhouse:`)
-- `lever:<handle>` — Lever
-- `ashby:<handle>` — Ashby
-- bare handle, e.g. `airbnb` — auto-detect across all three
+- **Hosted service:** https://s-hiring.pixharvest.com
+- **MCP endpoint:** `https://s-hiring.pixharvest.com/mcp`
+- **Official MCP Registry:** `io.github.contentforge-press/hiring-intel`
+- **npm:** [`hiring-change-intelligence`](https://www.npmjs.com/package/hiring-change-intelligence)
 
-Examples: `gh:airbnb`, `lever:spotify`, `ashby:ashby`.
+## Try it now
 
-## Tools & pricing
-| Tool | Price | What it returns |
+Open a **free, no-key snapshot**: https://s-hiring.pixharvest.com/v1/snapshot?company=airbnb
+
+Target format: `?company=airbnb` or a board handle like `?company=gh:airbnb` (Greenhouse / Lever / Ashby)
+
+## Tools
+
+| Tool | Price | Returns |
 |---|---|---|
-| `hiring_snapshot` | Free | Current openings: count, departments, locations |
-| `hiring_changes` | $0.05 | Roles opened / closed vs history |
-| `hiring_intel_report` | $0.50 | Hiring-growth report: focus teams, geography, takeaways |
-| `hiring_batch_scan` | $0.03 / company | Scan up to 50 companies in one call |
-| `hiring_landscape` | $5 | Hiring landscape across up to 10 companies |
+| `hiring_snapshot` | Free | Open roles, teams, locations and remote count for one company |
+| `hiring_changes` | $0.05 | New / removed roles and team shifts since last fetch |
+| `hiring_intel_report` | $0.50 | Hiring-growth summary by team and location |
+| `hiring_batch_scan` | $0.03 / company | Scan up to 50 companies |
+| `hiring_landscape` | $5 | Rank up to 10 companies on hiring momentum |
 
-## Subscriptions
-Continuous monitoring from a dashboard, with alerts when roles open/close:
-- **Pro $99/month** — 25 companies, alerts, weekly digest
-- **Business $499/month** — 150 companies, 10 seats, landscape reports
-- **Enterprise $2000/month** — unlimited, custom signals, SLA
+## One-call install for MCP clients
 
-See `/pricing`. Access keys are delivered instantly after USDC payment.
+The npm wrapper prints ready-to-paste MCP config:
 
-## HTTP examples
 ```bash
-# free
-curl "https://hiring-intel.contentforge-press.workers.dev/v1/snapshot?company=gh:airbnb"
-
-# paid (returns 402 + PAYMENT-REQUIRED; an x402 agent settles USDC and retries)
-curl "https://hiring-intel.contentforge-press.workers.dev/v1/lchanges?company=lever:spotify"
+npx -y hiring-change-intelligence
 ```
 
-## Install via npx
-```bash
-npx hiring-change-intelligence
+Or Add the remote server manually to any MCP client (Claude Desktop, Cursor, Windsurf, …):
+
+```json
+{
+  "mcpServers": {
+    "hiring-intel": {
+      "url": "https://s-hiring.pixharvest.com/mcp"
+    }
+  }
+}
 ```
 
-## Legal
-[Privacy](https://hiring-intel.contentforge-press.workers.dev/privacy) · [Terms](https://hiring-intel.contentforge-press.workers.dev/terms) · [Contact](https://hiring-intel.contentforge-press.workers.dev/contact)
+Anonymous `initialize` / `tools/list` are free; paid tool calls return an `x402` challenge.
 
-License: MIT.
+## Pay-per-call (x402)
+
+Call a paid route without payment and you receive `402 Payment Required` with a machine-readable `PAYMENT-REQUIRED` header (x402 v2) plus a v1 JSON body. The agent signs a USDC authorization, retries with the payment header, and the request settles on Base.
+
+## Monthly plans
+
+Same four tiers on every product — the same access key unlocks all five feeds:
+
+| Hobby | Pro | Business | Enterprise |
+|---|---|---|---|
+| $9/mo | $99/mo | $499/mo | $2000/mo |
+
+Get a key from the [pricing page](https://s-hiring.pixharvest.com/pricing), then pass it as `?key=...` on any call.
+
+## HTTP quick start
+
+```bash
+# free snapshot
+curl "https://s-hiring.pixharvest.com/v1/snapshot?company=REPLACE_TARGET"
+
+# paid call — returns 402 with the x402 challenge
+curl -i "https://s-hiring.pixharvest.com/v1/changes?company=REPLACE_TARGET"
+```
+
+## Links
+
+- Company hub: https://pixharvest.com
+- GitHub: https://github.com/contentforge-press
+- Contact: contentforge.press@outlook.com
+
+## License
+
+MIT — self-host, modify and run it yourself. The hosted service and its data are provided as-is.
