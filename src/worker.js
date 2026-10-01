@@ -574,6 +574,8 @@ function renderContact() {
 
 // ---- Subscription plans ----------------------------------------------------
 const PLANS = {
+    hobby: { id: 'hobby', name: 'Hobby', price: 9, days: 30, tagline: 'For individual developers & solo recruiters',
+        features: ['Unlimited CLI calls', 'No attribution', 'All per-result tools', 'Track up to 10 companies'] },
     pro: { id: 'pro', name: 'Pro', price: 99, days: 30, tagline: 'For recruiters & sales watching target accounts',
         features: ['Track up to 25 companies', 'Hiring change alerts (opened/closed roles)', 'Weekly portfolio digest', 'All paid MCP tools included', 'Email + webhook notifications'] },
     business: { id: 'business', name: 'Business', price: 499, days: 30, tagline: 'For recruiting & research teams',
@@ -584,8 +586,8 @@ const PLANS = {
 
 function renderPricing() {
     const cards = Object.values(PLANS).map((p, i) => `
-<div class="plan${i === 1 ? ' hl' : ''}">
-${i === 1 ? '<div class="pop">Most popular</div>' : ''}
+<div class="plan${p.id === 'pro' ? ' hl' : ''}">
+${p.id === 'pro' ? '<div class="pop">Most popular</div>' : ''}
 <div class="pname">${p.name}</div>
 <div class="price"><span class="amt">$${p.price}</span><span class="per">/month</span></div>
 <div class="tag">${p.tagline}</div>
@@ -597,7 +599,7 @@ ${i === 1 ? '<div class="pop">Most popular</div>' : ''}
 <style>
 ${PAGE_CSS}
 .wrap{max-width:1080px}
-.grid2{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:18px}
 .plan{position:relative;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:26px 22px;display:flex;flex-direction:column}
 .plan.hl{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc),0 18px 50px -20px rgba(91,140,255,.5)}
 .pop{position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:var(--acc);color:#fff;font-size:11px;font-weight:600;padding:4px 12px;border-radius:999px;text-transform:uppercase}
@@ -706,7 +708,7 @@ async function handleSubscribe(url, request, env) {
 }
 
 // ---- Dashboard & watchlist -------------------------------------------------
-const LIMITS = { pro: 25, business: 150, enterprise: 100000 };
+const LIMITS = { hobby: 10, pro: 25, business: 150, enterprise: 100000 };
 
 async function loadSubscription(kv, accessKey, skv) {
     if (!accessKey) return null;
@@ -902,6 +904,171 @@ async function scheduledScan(env){
 }
 
 // ---- MCP -------------------------------------------------------------------
+// ---------- 匿名 CLI 用量记账（养肥了再收）----------
+// 记录结构：{events:[{t,k}], wins:[字符串证据], windowStart}
+async function bumpInstall(kv, installId, kind, win) {
+    if (!installId || !kv) return null;
+    const key = `inst-${installId}`;
+    const now = Date.now();
+    let rec = null;
+    const raw = await kv.get(key);
+    if (raw) { try { rec = JSON.parse(raw); } catch { rec = null; } }
+    if (!rec || !rec.windowStart || now - rec.windowStart > 30 * 864e5) rec = { windowStart: now, events: [], wins: [] };
+    rec.events = rec.events.filter(e => now - e.t < 30 * 864e5);
+    const isWin = kind.startsWith('_win_');
+    if (!isWin) rec.events.push({ t: now, k: kind });
+    if (win || isWin) { rec.wins = rec.wins || []; if (rec.wins.length < 30) rec.wins.push(win || kind.replace(/^_win_/, '')); }
+    await kv.put(key, JSON.stringify(rec), { expirationTtl: 60 * 86400 });
+    const realKind = isWin ? kind.replace(/^_win_/, '') : kind;
+    const used = rec.events.filter(e => e.k === realKind).length;
+    return { used, wins: rec.wins };
+}
+
+const FREE_CLI_QUOTA = { changes: 20, intel: 20, batch: 3, landscape: 3 };
+
+// 付费门：识别 key（Hobby+）或匿名配额；否则给出引导
+async function gateCli(url, request, kv, skv, kind) {
+    const key = url.searchParams.get('key');
+    if (key) {
+        const sub = await loadSubscription(kv, key, skv);
+        if (sub && sub.active) return { allow: true, sub };
+        return { allow: false, reason: 'key_invalid' };
+    }
+    const install = url.searchParams.get('install') || request.headers.get('x-install-id') || '';
+    if (install) {
+        const quota = FREE_CLI_QUOTA[kind] ?? 0;
+        const m = await bumpInstall(kv, install, kind);
+        if (m && m.used <= quota) return { allow: true, used: m.used, quota, wins: m.wins };
+        return { allow: false, reason: 'quota_exceeded', used: m?.used, quota, wins: m?.wins || [] };
+    }
+    return { allow: false, reason: 'no_identity' };
+}
+
+// ---------- 免费 CLI：白嫖→撞墙→$9 矮台阶 ----------
+async function handleCli(url, request, env) {
+    const kind = url.searchParams.get('tool');
+    if (!FREE_CLI_QUOTA[kind]) return json({ error: 'invalid_tool', tools: Object.keys(FREE_CLI_QUOTA) }, 400);
+    const kv = env.INTEL_KV, skv = env.SHARED_KV;
+
+    // x402 支付头 → 按次结算（AI 走这条，不受配额限）
+    const payHdr = request.headers.get('X-PAYMENT') || request.headers.get('PAYMENT') || '';
+    if (!payHdr) {
+        const g = await gateCli(url, request, kv, skv, kind);
+        if (!g.allow) {
+            return json({
+                error: g.reason,
+                upgrade: new URL(url).origin + '/pricing',
+                hobby: { id: 'hobby', price: 9, perks: 'unlimited CLI, no attribution' },
+                used: g.used, quota: g.quota,
+                valueDelivered: (g.wins || []).slice(-6),
+                message: g.reason === 'quota_exceeded'
+                    ? `You've used this ${g.used} times in 30 days. Hobby ($9/month) unlocks unlimited calls and removes attribution.`
+                    : 'Add ?key=<accessKey> or ?install=<id>.',
+            }, 402);
+        }
+    }
+
+    // 解析参数
+    let companies;
+    if (kind === 'batch' || kind === 'landscape') {
+        let body = {};
+        if (request.method === 'POST') { try { body = await request.json(); } catch {} }
+        companies = body.companies || (url.searchParams.get('companies') || '').split(',').map(s => s.trim()).filter(Boolean);
+    } else {
+        companies = [url.searchParams.get('company') || url.searchParams.get('target') || ''];
+    }
+    companies = [...new Set(companies.map(s => String(s).trim()).filter(Boolean))];
+    if (!companies.length) return json({ error: 'missing_company' }, 400);
+    const target0 = parseTarget(companies[0]);
+    if ((kind === 'changes' || kind === 'intel') && !target0) return json({ error: 'invalid_company' }, 400);
+
+    let result, win, priceUsd;
+    try {
+        if (kind === 'changes') {
+            priceUsd = PRICE_CHANGES_USD;
+            if (payHdr) {
+                const req = buildRequirements(url.href, priceUsd, `Hiring changes for ${companies[0]}`);
+                const st = await verifyAndSettle(payHdr, req);
+                if (!st.ok) return json({ error: 'payment_rejected', detail: st.reason }, 402);
+            }
+            const t = parseTarget(companies[0]);
+            const data = await fetchJobs(t);
+            const prev = await readPrev(kv, data.platform, data.handle);
+            const changes = prev ? diffJobs(prev.jobs, data.jobs) : [];
+            snapshotStore(kv, data.handle, data.platform, data.jobs);
+            result = { company: data.handle, platform: data.platform, changeCount: changes.length, changes };
+            win = `Checked roles at ${data.handle}: ${data.jobs.length} open roles, ${changes.length} change(s)`;
+        } else if (kind === 'intel') {
+            priceUsd = PRICE_INTEL_USD;
+            if (payHdr) {
+                const req = buildRequirements(url.href, priceUsd, `Hiring intel for ${companies[0]}`);
+                const st = await verifyAndSettle(payHdr, req);
+                if (!st.ok) return json({ error: 'payment_rejected', detail: st.reason }, 402);
+            }
+            const t = parseTarget(companies[0]);
+            const data = await fetchJobs(t);
+            const prev = await readPrev(kv, data.platform, data.handle);
+            const changes = prev ? diffJobs(prev.jobs, data.jobs) : [];
+            snapshotStore(kv, data.handle, data.platform, data.jobs);
+            result = buildIntel(data.platform, data.handle, data.jobs, changes, new Date().toISOString());
+            win = `Workforce-intel report for ${data.handle}: ${data.jobs.length} open roles`;
+        } else if (kind === 'batch') {
+            const maxN = BATCH_MAX;
+            if (companies.length > maxN) return json({ error: 'too_many', max: maxN }, 400);
+            priceUsd = companies.length * PRICE_PER_COMPANY_USD;
+            if (payHdr) {
+                const req = buildRequirements(url.href, priceUsd, `Batch scan of ${companies.length}`);
+                const st = await verifyAndSettle(payHdr, req);
+                if (!st.ok) return json({ error: 'payment_rejected', detail: st.reason }, 402);
+            }
+            const results = await Promise.all(companies.slice(0, maxN).map(async (c) => {
+                const t = parseTarget(c);
+                if (!t) return { company: c, error: 'invalid_company' };
+                try {
+                    const data = await fetchJobs(t);
+                    const prev = await readPrev(kv, data.platform, data.handle);
+                    const changes = prev ? diffJobs(prev.jobs, data.jobs) : [];
+                    snapshotStore(kv, data.handle, data.platform, data.jobs);
+                    return { company: data.handle, platform: data.platform, openings: data.jobs.length, changeCount: changes.length };
+                } catch (e) { return { company: c, error: String(e.message || e) }; }
+            }));
+            result = { scanned: results.length, companies: results };
+            win = `Scanned ${results.length} companies`;
+        } else {
+            const maxN = LANDSCAPE_MAX;
+            if (companies.length > maxN) return json({ error: 'too_many', max: maxN }, 400);
+            priceUsd = PRICE_LANDSCAPE_USD;
+            if (payHdr) {
+                const req = buildRequirements(url.href, priceUsd, `Landscape across ${companies.length}`);
+                const st = await verifyAndSettle(payHdr, req);
+                if (!st.ok) return json({ error: 'payment_rejected', detail: st.reason }, 402);
+            }
+            const perCompany = await Promise.all(companies.slice(0, maxN).map(async (c) => {
+                const t = parseTarget(c);
+                if (!t) return { handle: c, platform: '', jobs: [], prevCount: 0 };
+                try {
+                    const data = await fetchJobs(t);
+                    const prev = await readPrev(kv, data.platform, data.handle);
+                    snapshotStore(kv, data.handle, data.platform, data.jobs);
+                    return { handle: data.handle, platform: data.platform, jobs: data.jobs, prevCount: prev ? prev.jobs.length : data.jobs.length };
+                } catch (e) { return { handle: c, platform: '', jobs: [], prevCount: 0, error: String(e.message || e) }; }
+            }));
+            result = buildLandscape(perCompany.map(p => p.handle), perCompany, safeHandle(companies[0]), new Date().toISOString());
+            win = `Hiring landscape across ${perCompany.length} companies`;
+        }
+    } catch (e) {
+        return json({ error: 'upstream_unavailable', detail: String(e.message || e), retry: 'try again shortly' }, 502);
+    }
+
+    // 匿名成功：记一条价值证据
+    const installId = request.headers.get('x-install-id') || url.searchParams.get('install') || '';
+    if (installId && !url.searchParams.get('key') && !payHdr) {
+        await bumpInstall(kv, installId, '_win_' + kind, win).catch(() => {});
+    }
+    const attributed = !!(url.searchParams.get('key') || payHdr);
+    return json({ data: result, attribution: attributed ? '' : 'Hiring Change Intelligence — free via x402 · remove attribution with Hobby $9/mo' });
+}
+
 const MCP_TOOLS = [
     { name: 'hiring_snapshot', description: 'FREE. Current job openings / who is hiring at one company right now, with teams (departments), locations, remote and employment type. Use for "what jobs is X hiring for", open roles, talent demand, headcount signals. Sources Greenhouse/Lever/Ashby. Target: gh:<h>, lever:<h>, ashby:<h> or bare company handle.',
       inputSchema: { type: 'object', properties: { company: { type: 'string' } }, required: ['company'] } },
@@ -1092,6 +1259,7 @@ async function handle(request, env) {
     if (pathname === '/contact') return new Response(renderContact(), { headers: { 'content-type': 'text/html; charset=utf-8' } });
 
     if (pathname === '/v1/snapshot') return handleSnapshot(url, request, env);
+    if (pathname === '/v1/cli') return handleCli(url, request, env);
     if (pathname === '/v1/lchanges') return handleChanges(url, request, env);
     if (pathname === '/v1/lintel') return handleIntel(url, request, env);
     if (pathname === '/v1/lbatch') return handleBatch(url, request, env);
