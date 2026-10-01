@@ -1,0 +1,119 @@
+{
+  "identifier": "contentforge-press-hiring-intel",
+  "name": "Hiring Change Intelligence",
+  "version": "1.0.0",
+  "description": "Track which companies are hiring and where, from Greenhouse/Lever/Ashby boards. Free snapshot; paid hiring-momentum reports. x402 USDC on Base.",
+  "category": "productivity",
+  "homepage": "https://github.com/contentforge-press/hiring-change-intelligence",
+  "cloudEndpoint": "https://s-hiring.pixharvest.com/mcp",
+  "icon": "🧑‍💼",
+  "tags": [
+    "hiring",
+    "jobs",
+    "greenhouse",
+    "lever",
+    "ashby",
+    "recruiting",
+    "x402"
+  ],
+  "localizations": [
+    {
+      "locale": "zh-CN",
+      "name": "招聘变化情报",
+      "description": "从 Greenhouse/Lever/Ashby 追踪公司招聘岗位与地点。免费快照；付费招聘增长报告。",
+      "tags": [
+        "招聘",
+        "岗位",
+        "greenhouse",
+        "lever",
+        "监控",
+        "x402"
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "name": "hiring_snapshot",
+      "description": "FREE. Open roles, teams, locations and remote count for one company.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "company": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "company"
+        ]
+      }
+    },
+    {
+      "name": "hiring_changes",
+      "description": "PAID ($0.05 USDC on Base via x402). New/removed roles and team shifts since last fetch.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "company": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "company"
+        ]
+      }
+    },
+    {
+      "name": "hiring_intel_report",
+      "description": "PAID ($0.50 USDC on Base via x402). Hiring-growth summary by team and location.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "company": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "company"
+        ]
+      }
+    },
+    {
+      "name": "hiring_batch_scan",
+      "description": "PAID ($0.03 per company USDC on Base via x402). Scan up to 50 companies.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "companies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "company handles"
+          }
+        },
+        "required": [
+          "companies"
+        ]
+      }
+    },
+    {
+      "name": "hiring_landscape",
+      "description": "PAID ($5 USDC on Base via x402). Rank up to 10 companies on hiring momentum.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "companies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "company handles"
+          }
+        },
+        "required": [
+          "companies"
+        ]
+      }
+    }
+  ]
+}
