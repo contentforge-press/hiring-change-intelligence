@@ -1,6 +1,7 @@
 // Hiring Change Intelligence — independent Cloudflare Worker, x402 paywall.
 // Tracks public job boards (Greenhouse / Lever / Ashby): hiring growth signals
 // for investors, recruiters and sales teams. Zero runtime dependencies.
+import { FAVICON_B64, OG_B64 } from './brand.js';
 
 // ---- Config ----------------------------------------------------------------
 const PAY_TO = '0x4873108b2280b7f3EF8cD70cEca3aaBD385f8D6C';
@@ -458,7 +459,7 @@ h1{font-size:30px;margin:0 0 6px}
 .sub{color:var(--mut);font-size:15px;margin-bottom:22px}
 a{color:#9db8ff}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin:16px 0}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
 label{display:block;font-size:13px;color:var(--mut);margin-bottom:8px}
 .row{display:flex;gap:10px;flex-wrap:wrap}
 input{flex:1;min-width:220px;background:#0d1119;border:1px solid var(--line);border-radius:9px;color:var(--fg);padding:11px 13px;font-size:14px}
@@ -474,6 +475,9 @@ pre{background:#0d1119;border:1px solid var(--line);border-radius:10px;padding:1
 function renderHome() {
     return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Track job openings and closings across Greenhouse, Lever and Ashby to detect hiring growth and freezes. Free CLI quota, Hobby $9/mo in USDC.">
+<link rel="icon" type="image/png" href="/favicon.png">
+<meta property="og:type" content="website"><meta property="og:title" content="Hiring Change Intelligence"><meta property="og:description" content="Track job openings and closings across Greenhouse, Lever and Ashby to detect hiring growth and freezes. Free CLI quota, Hobby $9/mo in USDC."><meta property="og:image" content="/og.png"><meta name="twitter:card" content="summary_large_image">
 <title>Hiring Change Intelligence — x402</title><style>${PAGE_CSS}</style></head>
 <body><div class="wrap">
 <h1>Hiring Change Intelligence</h1>
@@ -542,6 +546,9 @@ async function run(){
 const LEGAL_CSS = PAGE_CSS;
 function legalPage(title, bodyHtml) {
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Track job openings and closings across Greenhouse, Lever and Ashby to detect hiring growth and freezes. Free CLI quota, Hobby $9/mo in USDC.">
+<link rel="icon" type="image/png" href="/favicon.png">
+<meta property="og:type" content="website"><meta property="og:title" content="${title} · Hiring Change Intelligence"><meta property="og:description" content="Track job openings and closings across Greenhouse, Lever and Ashby to detect hiring growth and freezes. Free CLI quota, Hobby $9/mo in USDC."><meta property="og:image" content="/og.png"><meta name="twitter:card" content="summary_large_image">
 <title>${title} · Hiring Change Intelligence</title><style>${LEGAL_CSS}</style></head>
 <body><div class="wrap" style="max-width:820px">
 <h1>${title}</h1>
@@ -584,6 +591,33 @@ const PLANS = {
         features: ['Unlimited companies & seats', 'Custom signals & private data feeds', 'Dedicated landscape reports', 'SLA & onboarding', 'SSO & advanced controls'] },
 };
 
+const CHANGELOG = [
+  { date: '2026-10-01', tag: 'Growth', items: [
+    'Hobby $9 entry plan launched.',
+    'Free CLI with per-install quota (changes/intel 20, batch/landscape 3 per 30 days).',
+    'One access key now works across all five intelligence feeds.',
+  ]},
+  { date: '2026-09-30', tag: 'Discovery', items: [
+    'Added llms.txt and /docs for AI-agent discovery.',
+    'Public /status page with live health probes.',
+  ]},
+  { date: '2026-09-29', tag: 'Platform', items: [
+    'Listed on the official MCP Registry, Smithery and Glama.',
+    'Self-serve /pricing checkout and /dashboard with webhook + email alerts.',
+    'Company-grade hardening: no key custody, SSRF guard, rate limits.',
+  ]},
+];
+function renderChangelog() {
+  const rows = CHANGELOG.map(r => '<div class="cl-card"><div class="cl-head"><span class="cl-date">'+r.date+'</span><span class="cl-tag">'+r.tag+'</span></div><ul>'+r.items.map(i=>'<li>'+i+'</li>').join('')+'</ul></div>').join('');
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" type="image/png" href="/favicon.png"><title>Changelog</title><style>
+body{margin:0;font:15px/1.6 -apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#0b0e14;color:#e8ecf4}.wrap{max-width:820px;margin:0 auto;padding:48px 22px}a{color:#9db8ff}
+h1{margin:0 0 4px}.sub{color:#8b95a7;margin:0 0 20px}
+.cl-card{background:#141925;border:1px solid #222a3a;border-radius:14px;padding:18px 20px;margin:14px 0}
+.cl-head{display:flex;gap:12px;align-items:center;margin-bottom:6px}.cl-date{font-weight:700}.cl-tag{font-size:11px;text-transform:uppercase;color:#5b8cff;border:1px solid #222a3a;border-radius:999px;padding:2px 10px}
+ul{margin:0;padding-left:20px}li{padding:3px 0;font-size:14px}
+</style></head><body><div class="wrap"><h1>Changelog</h1><p class="sub">What shipped, most recent first. <a href="/">Home</a></p>${rows}</div></body></html>`;
+}
+
 function renderPricing() {
     const cards = Object.values(PLANS).map((p, i) => `
 <div class="plan${p.id === 'pro' ? ' hl' : ''}">
@@ -595,6 +629,9 @@ ${p.id === 'pro' ? '<div class="pop">Most popular</div>' : ''}
 <button class="cta" data-plan="${p.id}">Choose ${p.name}</button>
 </div>`).join('');
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Track job openings and closings across Greenhouse, Lever and Ashby to detect hiring growth and freezes. Free CLI quota, Hobby $9/mo in USDC.">
+<link rel="icon" type="image/png" href="/favicon.png">
+<meta property="og:type" content="website"><meta property="og:title" content="Hiring Change Intelligence"><meta property="og:description" content="Track job openings and closings across Greenhouse, Lever and Ashby to detect hiring growth and freezes. Free CLI quota, Hobby $9/mo in USDC."><meta property="og:image" content="/og.png"><meta name="twitter:card" content="summary_large_image">
 <title>Pricing · Hiring Change Intelligence</title>
 <style>
 ${PAGE_CSS}
@@ -731,6 +768,9 @@ async function watchView(kv, key, skv) {
 
 function renderDashboard() {
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Track job openings and closings across Greenhouse, Lever and Ashby to detect hiring growth and freezes. Free CLI quota, Hobby $9/mo in USDC.">
+<link rel="icon" type="image/png" href="/favicon.png">
+<meta property="og:type" content="website"><meta property="og:title" content="Hiring Change Intelligence"><meta property="og:description" content="Track job openings and closings across Greenhouse, Lever and Ashby to detect hiring growth and freezes. Free CLI quota, Hobby $9/mo in USDC."><meta property="og:image" content="/og.png"><meta name="twitter:card" content="summary_large_image">
 <title>Dashboard · Hiring Change Intelligence</title>
 <style>
 ${PAGE_CSS}
@@ -1246,12 +1286,15 @@ async function handle(request, env) {
     if (pathname === '/mcp') return handleMcp(request, env);
     if (pathname === '/status') return new Response(STATUS_HTML, { headers: { 'content-type': 'text/html; charset=utf-8' } });
     if (pathname === '/llms.txt') return new Response(LLMS_TXT, { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+    if (pathname === '/favicon.png') return new Response(Uint8Array.from(atob(FAVICON_B64), c => c.charCodeAt(0)), { headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' } });
+    if (pathname === '/og.png') return new Response(Uint8Array.from(atob(OG_B64), c => c.charCodeAt(0)), { headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' } });
     if (pathname === '/docs') return new Response(DOCS_MD, { headers: { 'content-type': 'text/markdown; charset=utf-8' } });
     if (pathname === '/robots.txt') return new Response(ROBOTS_TXT, { headers: { 'content-type': 'text/plain; charset=utf-8' } });
     if (pathname === '/sitemap.xml') return new Response(SITEMAP_XML, { headers: { 'content-type': 'application/xml' } });
     if (pathname === '/.well-known/x402') return renderWellKnown();
     if (pathname === '/.well-known/glama.json') return renderGlama();
 
+    if (pathname === '/changelog') return new Response(renderChangelog(), { headers: { 'content-type': 'text/html; charset=utf-8' } });
     if (pathname === '/pricing') return new Response(renderPricing(), { headers: { 'content-type': 'text/html; charset=utf-8' } });
     if (pathname === '/dashboard') return new Response(renderDashboard(), { headers: { 'content-type': 'text/html; charset=utf-8' } });
     if (pathname === '/privacy') return new Response(renderPrivacy(), { headers: { 'content-type': 'text/html; charset=utf-8' } });
