@@ -1,7 +1,7 @@
 {
-  "identifier": "contentforge-press-hiring-intel",
+  "identifier": "contentforge-press-hiring-change-intelligence",
   "name": "Hiring Change Intelligence",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Track which companies are hiring and where, from Greenhouse/Lever/Ashby boards. Free snapshot; paid hiring-momentum reports. x402 USDC on Base.",
   "category": "productivity",
   "homepage": "https://github.com/contentforge-press/hiring-change-intelligence",
