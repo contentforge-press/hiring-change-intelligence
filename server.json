@@ -3,16 +3,22 @@
   "name": "io.github.contentforge-press/hiring-intel",
   "title": "Hiring Change Intelligence",
   "description": "Track public job boards: free snapshot, paid hiring-growth intel via x402 USDC.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "remotes": [
-    { "type": "streamable-http", "url": "https://hiring-intel.contentforge-press.workers.dev/mcp" }
+    {
+      "type": "streamable-http",
+      "url": "https://s-hiring.pixharvest.com/mcp"
+    }
   ],
   "packages": [
     {
       "registryType": "npm",
       "identifier": "hiring-change-intelligence",
       "version": "1.0.0",
-      "transport": { "type": "streamable-http", "url": "https://hiring-intel.contentforge-press.workers.dev/mcp" }
+      "transport": {
+        "type": "streamable-http",
+        "url": "https://s-hiring.pixharvest.com/mcp"
+      }
     }
   ]
 }
