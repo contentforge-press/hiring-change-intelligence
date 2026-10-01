@@ -433,6 +433,31 @@ function renderGlama() {
     });
 }
 
+function renderAgentMeta(origin) {
+    const base = origin;
+    return json({
+        name: 'Hiring Change Intelligence',
+        description: 'Hiring intelligence for autonomous AI agents. Free public snapshot of companies and open roles; paid change detection, intel reports, batch scans and hiring landscape. Paid calls settle USDC on Base via x402 (P2P, 0% commission). One access key works across the whole change-intelligence family. Free CLI quota, Hobby $9/mo and higher plans.',
+        image: `${base}/favicon.png`,
+        x402Support: true,
+        payment: {
+            scheme: 'exact', network: 'eip155:8453', asset: USDC_BASE,
+            payTo: PAY_TO, facilitator: FACILITATOR,
+            pricing: {
+                changes: PRICE_CHANGES_USD, intel: PRICE_INTEL_USD,
+                batchPerCompany: PRICE_PER_COMPANY_USD, landscape: PRICE_LANDSCAPE_USD,
+            },
+        },
+        services: [
+            { name: 'MCP', endpoint: `${base}/mcp`, version: '2025-06-18', description: 'Hiring intelligence — Streamable HTTP MCP with free and x402-paid tools.' },
+            { name: 'API', endpoint: `${base}/v1/cli`, description: 'CLI/agent endpoint: free anonymous quota, then x402 per call.' },
+            { name: 'x402', endpoint: `${base}/.well-known/x402`, description: 'Machine-readable payment requirements.' },
+            { name: 'web', endpoint: `${base}/`, description: 'Human docs, pricing, dashboard, demos.' },
+            { name: 'pricing', endpoint: `${base}/pricing`, description: 'Hobby $9, Pro $99, Business $499, Enterprise $2000 per month.' },
+        ],
+    });
+}
+
 function renderWellKnown() {
     return json({
         x402Version: 1,
@@ -886,7 +911,7 @@ async function dispatchHiringAlerts(wl,alerts){
  if(wl.alertEmail&&typeof RESEND_API_KEY!=='undefined'&&RESEND_API_KEY){
   try{
    const total=alerts.reduce((n,a)=>n+a.changes.length,0);
-   await fetch('https://api.resend.com/emails',{method:'POST',headers:{authorization:'Bearer '+RESEND_API_KEY,'content-type':'application/json'},body:JSON.stringify({from:'Hiring Intel <alerts@mail.contentforge.press>',to:[wl.alertEmail],subject:`💼 ${total} hiring change(s)`,html:alerts.map(a=>'<h3>'+a.company+'</h3>'+a.changes.slice(0,20).map(c=>'<div>• '+(c.changeType==='new_opening'?'Opened':'Closed')+' — '+(c.title||'')+'</div>').join('')).join('')})});
+   await fetch('https://api.resend.com/emails',{method:'POST',headers:{authorization:'Bearer '+RESEND_API_KEY,'content-type':'application/json'},body:JSON.stringify({from:'Hiring Intel <alerts@mail.pixharvest.com>',to:[wl.alertEmail],subject:`💼 ${total} hiring change(s)`,html:alerts.map(a=>'<h3>'+a.company+'</h3>'+a.changes.slice(0,20).map(c=>'<div>• '+(c.changeType==='new_opening'?'Opened':'Closed')+' — '+(c.title||'')+'</div>').join('')).join('')})});
   }catch{}
  }
 }
@@ -1292,6 +1317,7 @@ async function handle(request, env) {
     if (pathname === '/robots.txt') return new Response(ROBOTS_TXT, { headers: { 'content-type': 'text/plain; charset=utf-8' } });
     if (pathname === '/sitemap.xml') return new Response(SITEMAP_XML, { headers: { 'content-type': 'application/xml' } });
     if (pathname === '/.well-known/x402') return renderWellKnown();
+    if (pathname === '/.well-known/agent.json') return renderAgentMeta(url.origin);
     if (pathname === '/.well-known/glama.json') return renderGlama();
 
     if (pathname === '/changelog') return new Response(renderChangelog(), { headers: { 'content-type': 'text/html; charset=utf-8' } });
