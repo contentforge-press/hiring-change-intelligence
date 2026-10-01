@@ -3,6 +3,7 @@
 // for investors, recruiters and sales teams. Zero runtime dependencies.
 import { FAVICON_B64, OG_B64 } from './brand.js';
 import { recordAnalytics, readAnalytics, ANALYTICS_JS } from './analytics.js';
+import { paymentRequiredResponse, verifySettleDual } from './x402v2.js';
 
 const TRUST_HTML = `
 <div class="wrap" style="margin-top:28px;max-width:920px;margin-left:auto;margin-right:auto">
@@ -284,12 +285,23 @@ async function verifyAndSettle(paymentHeader, requirements) {
 }
 
 async function requirePaid(request, resource, priceUsd, description) {
-    const paymentHeader = request.headers.get('PAYMENT') || request.headers.get('X-PAYMENT');
+    const paymentHeader = request.headers.get('PAYMENT') || request.headers.get('X-PAYMENT')
+        || request.headers.get('PAYMENT-SIGNATURE');
     const requirements = buildRequirements(resource, priceUsd, description);
-    if (!paymentHeader) return { paid: false, response: paymentRequired(requirements) };
+    if (!paymentHeader) {
+        const cfg = {
+            NETWORK_V2: 'eip155:8453', FACILITATOR_V2: 'https://x402.stablecoin.xyz',
+            USDC_BASE, PAY_TO,
+        };
+        return { paid: false, response: paymentRequiredResponse({ resource, description, priceUsd, cfg, v1Requirements: requirements }) };
+    }
     let settlement;
     try {
-        settlement = await verifyAndSettle(paymentHeader, requirements);
+        settlement = await verifySettleDual({
+            request, resource, amount: requirements.maxAmountRequired, priceUsd,
+            cfg: { NETWORK_V2: 'eip155:8453', FACILITATOR_V2: 'https://x402.stablecoin.xyz', USDC_BASE, PAY_TO },
+            v1Verify: async (raw) => verifyAndSettle(raw, requirements),
+        });
     } catch (err) {
         return { paid: false, response: json({ error: 'unexpected_verify_error', detail: String(err?.message || err) }, 502) };
     }
