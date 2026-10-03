@@ -461,6 +461,18 @@ function renderGlama() {
     });
 }
 
+function renderMcpJson(origin) {
+    const base = origin;
+    return json({
+        servers: [{
+            name: 'Hiring Change Intelligence',
+            description: 'Hiring intelligence for autonomous AI agents. Free public snapshot of companies and hiring signals; paid change detection, intel reports, batch scans and market landscape. Paid calls settle USDC on Base via x402 (P2P, 0% commission). One access key works across the whole change-intelligence family.',
+            url: `${base}/mcp`,
+            transport: 'streamable-http',
+        }],
+    });
+}
+
 function renderAgentMeta(origin) {
     const base = origin;
     return json({
@@ -1359,6 +1371,7 @@ async function handle(request, env) {
     if (pathname === '/.well-known/x402') return renderWellKnown();
     if (pathname === '/.well-known/agent.json') return renderAgentMeta(url.origin);
     if (pathname === '/.well-known/glama.json') return renderGlama();
+        if (pathname === '/.well-known/mcp.json') return renderMcpJson(new URL(request.url).origin);
 
     if (pathname === '/changelog') return new Response(renderChangelog(), { headers: { 'content-type': 'text/html; charset=utf-8' } });
     if (pathname === '/pricing') return pageOut(renderPricing(), '/pricing');
