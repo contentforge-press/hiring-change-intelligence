@@ -334,6 +334,7 @@ async function handleSnapshot(url, request, env) {
         fetchedAt: new Date().toISOString(), totalOpenings: data.jobs.length,
         byDepartment: groupCount(data.jobs, 'department').slice(0, 10),
         jobs: data.jobs.slice(0, 200),
+        upgrade: 'Full change report — $0.05 USDC (Base) via x402 — GET /v1/lchanges?company=' + data.handle,
     });
 }
 
@@ -704,7 +705,7 @@ li:before{content:"✓";position:absolute;left:0;color:var(--acc);font-weight:70
 @media(max-width:860px){.grid2{grid-template-columns:1fr}}
 </style></head><body><div class="wrap">
 <h1 style="text-align:center">Plans &amp; pricing</h1>
-<p class="sub" style="text-align:center">Start free pay-per-result, or get continuous hiring signals. Billed in <b>USDC on Base</b> — no card.</p>
+<p class="sub" style="text-align:center">Start free pay-per-result, or get continuous hiring signals. Billed in <b>USDC on Base</b> — no card needed, or <a href="https://pixharvest.com/pricing" style="color:#9db8ff">pay by card at pixharvest.com</a> (9/9/99/mo) · <a href="mailto:contentforge.press@outlook.com" style="color:#9db8ff">email us</a>.</p>
 <div class="grid2">${cards}</div>
 <div class="foot" id="paybox"><h3 id="paytitle" style="margin:0 0 8px">Complete subscription</h3><pre id="payjson">Loading…</pre></div>
 <p class="muted" style="text-align:center;margin-top:24px">Only a few calls? <a href="/">Pay per result</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></p>
