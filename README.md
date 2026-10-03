@@ -64,6 +64,11 @@ Same four tiers on every product — the same access key unlocks all five feeds:
 |---|---|---|---|
 | $9/mo | $99/mo | $499/mo | $2000/mo |
 
+> 💳 **Card (auto-billed, no crypto):** Standard **$19/mo** · Pro **$79/mo** · Business **$199/mo** · Enterprise **$499/mo** — billed via Dodo, checkout links at [pixharvest.com/pricing](https://pixharvest.com/pricing).
+> ⛓️ **USDC (x402, peer-to-peer):** Standard $9/mo · Pro $99/mo · Business $499/mo · Enterprise $2000/mo — paid in USDC on Base, 0% commission.
+
+One plan unlocks one access key for all five feeds; your key works across Shopify, GitHub, App Store, Hiring and HN.
+
 Get a key from the [pricing page](https://s-hiring.pixharvest.com/pricing), then pass it as `?key=...` on any call.
 
 ## HTTP quick start
